@@ -36,10 +36,10 @@ every version of each, what it costs to fetch, and what is inside it.
 
 | system          | executables | `name@version` | package versions | store paths |
 | --------------- | ----------- | -------------- | ---------------- | ----------- |
-| `aarch64-linux` | 47,795      | 795,110        | 225,262          | 626,275     |
-| `x86_64-linux`  | 51,584      | 885,282        | 254,873          | 626,275     |
+| `aarch64-linux` | 47,833      | 795,951        | 225,676          | 627,650     |
+| `x86_64-linux`  | 51,623      | 886,133        | 255,297          | 627,650     |
 
-Store paths from 2012-07-05 to 2026-09-29, 61.1 TB unpacked. Commands are nameable from 2017-03-23 on, which is when Hydra started publishing file listings. Built from nixpkgs-multiverse `data-20261001`.
+Store paths from 2012-07-05 to 2026-10-01, 61.3 TB unpacked. Commands are nameable from 2017-03-23 on, which is when Hydra started publishing file listings. Built from nixpkgs-multiverse `data-20261004`.
 <!-- END index-status -->
 
 ## Why

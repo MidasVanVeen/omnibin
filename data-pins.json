@@ -45,31 +45,35 @@
    "narHash": "sha256-5IlFm5tewib2wtM7URwjzEYGKnusmy84PrA4WOzCPKg=",
    "tag": "data-20261002"
   },
+  "listings-20261005-000.jsonl.zst": {
+   "narHash": "sha256-VO4uhOqvAYFFccdcu4XHO5qna+AzAG3JfKl232vT3Hs=",
+   "tag": "data-20261005"
+  },
   "narinfos-aarch64-linux.jsonl.zst": {
-   "narHash": "sha256-vDnc88IPJgQSYYRGkcpDnshU3dXSPy1ZJJX2zReqo5c=",
-   "tag": "data-20261002"
+   "narHash": "sha256-3w4tvqsyd9XOlnbWEBex9IdJPL+Gq/yk6GI/61mD/a0=",
+   "tag": "data-20261005"
   },
   "narinfos-aarch64.jsonl.zst": {
    "narHash": "sha256-9A6se1tUAHsCs4iZ/r7GeaUl2Zzo+QTAT/KJ6pW71M0=",
    "tag": "data-20260925"
   },
   "narinfos-x86_64-linux.jsonl.zst": {
-   "narHash": "sha256-Mvx/6+EiqVkE+nMVna0+xFNEfBnfz9Cy0soXVEgkYc4=",
-   "tag": "data-20261002"
+   "narHash": "sha256-o8U0mWRmEKXYoUPfzFXsEOyZIBKrzKwoXLoLwMuKuu4=",
+   "tag": "data-20261005"
   },
   "narinfos.jsonl.zst": {
    "narHash": "sha256-2FXd+ydfsV4Pp79XeatXoeWAmh3TJOfYhXHphqOOq+o=",
    "tag": "data-20260925"
   },
   "omnibin-aarch64-linux.db": {
-   "narHash": "sha256-Tu/UjyOgDHiKXNAi3yiQbd1aHNG9sEs/uG939H88TXY=",
-   "tag": "data-20261002"
+   "narHash": "sha256-VLy9Ll5fbC0Ru2SZ9Tcrz5LSN3XqTx/szKCPe59usQE=",
+   "tag": "data-20261005"
   },
   "omnibin-x86_64-linux.db": {
-   "narHash": "sha256-ei4riDXObk7FMobPRWlzKZHq3Yu1Cbyb6nWgcMYJL7k=",
-   "tag": "data-20261002"
+   "narHash": "sha256-iiDYXPwpCSRV1fEYj3P6eOu7GP5jd8X1glNKHlu4Ci4=",
+   "tag": "data-20261005"
   }
  },
- "multiverseTag": "data-20261001",
+ "multiverseTag": "data-20261004",
  "version": 1
 }
