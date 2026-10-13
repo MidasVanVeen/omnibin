@@ -44,38 +44,62 @@ pkgs.writeShellApplication {
     pkgs.util-linux
     pkgs.coreutils
     pkgs.fuse3
+    pkgs.nix
   ];
   text = ''
     runtime=''${XDG_RUNTIME_DIR:-/tmp/omnibin-$(id -u)}
 
-    # Being root in a user namespace is not being root on the host, which
-    # decides where things go: / belongs to real root, so /omnibin cannot be
-    # created. The tree goes under XDG_RUNTIME_DIR, which this user owns, and
-    # $OMNIBIN_TREE names it. On a machine where the NixOS module did the
-    # mounting there is a real /omnibin.
-    OMNIBIN_TREE=''${OMNIBIN_TREE:-$runtime/omnibin}
-    OMNIBIN_STORE=''${OMNIBIN_STORE:-$runtime/omnibin-store}
+    # The tree goes under XDG_RUNTIME_DIR, which this user owns, since /
+    # belongs to root and /omnibin cannot be created here. $OMNIBIN_TREE
+    # names it. The NixOS module can create a real /omnibin.
+    mkdir -p "$runtime"
+
+    # A killed shell can leave indirect roots behind. The lock stays open in
+    # the daemon and shell children, so only abandoned sessions are removed.
+    for candidate in "$runtime"/omnibin.*; do
+      [ -f "$candidate/lock" ] || continue
+      exec 8<>"$candidate/lock"
+      if flock -n 8; then
+        fusermount3 -u "$candidate/tree" 2>/dev/null || true
+        fusermount3 -u "$candidate/store" 2>/dev/null || true
+        rm -rf "$candidate/gcroots"
+        rm -f "$candidate/lock"
+        rmdir "$candidate/tree" "$candidate/store" "$candidate" 2>/dev/null || true
+      fi
+      exec 8>&-
+    done
+
+    session_dir=$(mktemp -d "$runtime/omnibin.XXXXXXXX")
+    exec 9>"$session_dir/lock"
+    flock 9
+    OMNIBIN_TREE=''${OMNIBIN_TREE:-$session_dir/tree}
+    OMNIBIN_STORE=''${OMNIBIN_STORE:-$session_dir/store}
+    OMNIBIN_GC_ROOTS="$session_dir/gcroots"
     OMNIBIN_CACHE=''${OMNIBIN_CACHE:-''${XDG_CACHE_HOME:-$HOME/.cache}/omnibin}
-    export OMNIBIN_TREE OMNIBIN_STORE OMNIBIN_CACHE
+    export OMNIBIN_TREE OMNIBIN_STORE OMNIBIN_CACHE OMNIBIN_GC_ROOTS
 
     mkdir -p "$OMNIBIN_CACHE"
 
-    # A previous run that was killed rather than exited leaves its mounts
-    # behind, and a stale FUSE mountpoint refuses even stat(), so mounting
-    # over it fails with a permission error that has nothing to do with
-    # permissions. Clear them before making the directories.
-    for stale in "$OMNIBIN_TREE" "$OMNIBIN_STORE"; do
-      fusermount3 -u "$stale" 2>/dev/null || true
-    done
-    mkdir -p "$OMNIBIN_TREE" "$OMNIBIN_STORE"
+    mkdir -p "$OMNIBIN_TREE" "$OMNIBIN_STORE" "$OMNIBIN_GC_ROOTS"
+
+    cleanup() {
+      kill "$mount_pid" 2>/dev/null || true
+      wait "$mount_pid" 2>/dev/null || true
+      fusermount3 -u "$OMNIBIN_TREE" 2>/dev/null || true
+      fusermount3 -u "$OMNIBIN_STORE" 2>/dev/null || true
+      rm -rf "$OMNIBIN_GC_ROOTS"
+      rm -f "$session_dir/lock"
+      rmdir "$OMNIBIN_TREE" "$OMNIBIN_STORE" "$session_dir" 2>/dev/null || true
+    }
 
     omnibin mount \
       --store "$OMNIBIN_STORE" \
       --passthrough /nix/store \
       --tree "$OMNIBIN_TREE" \
+      --gc-roots "$OMNIBIN_GC_ROOTS" \
       --cache-dir "$OMNIBIN_CACHE" &
     mount_pid=$!
-    trap 'kill "$mount_pid" 2>/dev/null || true' EXIT
+    trap cleanup EXIT
 
     # Wait for the tree to answer before handing over the shell, so the first
     # command typed is not a race with the mount.
@@ -97,6 +121,8 @@ pkgs.writeShellApplication {
       set -- "''${SHELL:-/bin/sh}"
     fi
 
-    unshare --user --map-root-user --mount -- ${inner} "$@"
+    # Keep the caller's uid and gid visible to shells and agents. Capabilities
+    # in the new user namespace are needed for the private bind mount.
+    unshare --user --map-current-user --keep-caps --mount -- ${inner} "$@"
   '';
 }

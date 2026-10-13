@@ -2,10 +2,8 @@
 //!
 //! Every store path the index knows about is present here. Looking at one,
 //! whether by `stat`, `ls`, or following a symlink, is answered from the
-//! published file listing and
-//! costs no transfer. Reading a file's contents is what fetches the path's
-//! NAR, once, after which the path is served from the unpacked copy like any
-//! other directory.
+//! published file listing and costs no transfer. Reading a file's contents
+//! imports its closure through Nix in the shell or unpacks its NAR elsewhere.
 //!
 //! A host that already has a real `/nix/store` keeps it: paths present in the
 //! passthrough directory are served from there and never fetched. That is
@@ -138,10 +136,31 @@ impl StoreFs {
     /// node is lazy and has not been fetched yet.
     fn real_path(&self, node: &Node) -> Option<PathBuf> {
         match &node.source {
-            Source::Passthrough(base) => Some(Self::at(base, &node.rel)),
+            Source::Passthrough(base) => {
+                if !base.exists() {
+                    let name = base.file_name()?.to_str()?;
+                    let digest = name.get(..DIGEST_LEN)?;
+                    if let Some(path) = self.store_path(digest) {
+                        let imported = self
+                            .fetcher
+                            .materialize(&path)
+                            .map_err(|error| eprintln!("omnibin: {error:#}"))
+                            .ok()?;
+                        return Some(Self::at(&imported, &node.rel));
+                    }
+                }
+                Some(Self::at(base, &node.rel))
+            }
             Source::Lazy(digest) => {
                 let path = self.store_path(digest)?;
-                let dir = self.fetcher.materialize(&path).ok()?;
+                let dir = self
+                    .fetcher
+                    .materialize(&path)
+                    .map_err(|error| {
+                        eprintln!("omnibin: {error:#}");
+                        error
+                    })
+                    .ok()?;
                 Some(Self::at(&dir, &node.rel))
             }
         }
@@ -150,11 +169,16 @@ impl StoreFs {
     /// The real path only if it is already on disk, with no fetch.
     fn materialized_path(&self, node: &Node) -> Option<PathBuf> {
         match &node.source {
-            Source::Passthrough(base) => Some(Self::at(base, &node.rel)),
-            Source::Lazy(digest) if self.fetcher.is_materialized(digest) => {
-                Some(Self::at(&self.fetcher.store_path_dir(digest), &node.rel))
+            Source::Passthrough(base) if base.exists() => Some(Self::at(base, &node.rel)),
+            Source::Passthrough(_) => None,
+            Source::Lazy(digest) => {
+                let path = self.store_path(digest)?;
+                if self.fetcher.is_materialized(&path) {
+                    Some(Self::at(&self.fetcher.store_path_dir(&path), &node.rel))
+                } else {
+                    None
+                }
             }
-            Source::Lazy(_) => None,
         }
     }
 
@@ -517,6 +541,14 @@ impl Filesystem for StoreFs {
             reply.error(libc::EIO);
             return;
         };
+
+        if let Source::Passthrough(base) = &node.source {
+            if let Err(error) = self.fetcher.protect_passthrough(base) {
+                eprintln!("omnibin: {error:#}");
+                reply.error(libc::EIO);
+                return;
+            }
+        }
 
         match fs::File::open(&real) {
             Ok(file) => {

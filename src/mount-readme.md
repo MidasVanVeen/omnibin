@@ -29,6 +29,7 @@ Tables: paths(digest, name, nar_url, nar_size), pkgs(attr, version, digest,
 last_seen), bins(name, attr, version, digest), latest(name, attr, version,
 digest).
 
-Nothing is installed. A path is downloaded from cache.nixos.org the first
-time something reads a file inside it, so the first run of a large package is
-slow and every run after it is not.
+A path is fetched from cache.nixos.org when something first reads a file
+inside it. In omnibin-shell, Nix registers it in the real store and normal
+garbage collection can reclaim it after the shell exits. The module and
+container keep a private cache instead.

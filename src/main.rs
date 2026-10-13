@@ -54,9 +54,15 @@ enum Command {
         #[arg(long)]
         passthrough: Option<PathBuf>,
 
-        /// Where fetched paths and listings are kept between runs.
+        /// Where listings and narinfos are cached. Private-cache mounts also
+        /// keep unpacked paths here.
         #[arg(long)]
         cache_dir: Option<PathBuf>,
+
+        /// Import fetched paths into the host Nix store and keep indirect GC
+        /// roots in this session directory. Requires a real-store passthrough.
+        #[arg(long)]
+        gc_roots: Option<PathBuf>,
 
         #[arg(long, default_value = DEFAULT_CACHE_URL)]
         cache_url: String,
@@ -126,6 +132,7 @@ fn mount(
     tree: PathBuf,
     passthrough: Option<PathBuf>,
     cache_dir: Option<PathBuf>,
+    gc_roots: Option<PathBuf>,
     cache_url: String,
     db: Option<PathBuf>,
     allow_other: bool,
@@ -135,7 +142,13 @@ fn mount(
         Some(dir) => dir,
         None => default_cache_dir()?,
     };
-    let fetcher = Arc::new(Fetcher::new(&cache_dir, &cache_url)?);
+    if gc_roots.is_some()
+        && (store == PathBuf::from(NIX_STORE)
+            || passthrough.as_deref() != Some(Path::new(NIX_STORE)))
+    {
+        bail!("--gc-roots requires --passthrough /nix/store and a neutral --store mountpoint outside the shell namespace");
+    }
+    let fetcher = Arc::new(Fetcher::new(&cache_dir, &cache_url, gc_roots)?);
 
     // Mounting the lazy store over a real one without passthrough would hide
     // every path the host already has, including the one this process is
@@ -332,6 +345,7 @@ fn main() -> Result<()> {
             tree,
             passthrough,
             cache_dir,
+            gc_roots,
             cache_url,
             db,
             allow_other,
@@ -340,6 +354,7 @@ fn main() -> Result<()> {
             tree,
             passthrough,
             cache_dir,
+            gc_roots,
             cache_url,
             db,
             allow_other,

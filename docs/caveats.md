@@ -8,14 +8,15 @@ path answers `narinfo=200 ls=404`. Those paths still fetch and still run, and
 newer; they just cannot be searched for by the command they contain. 245,532
 of 253,817 package versions are named on `x86_64-linux`.
 
-**Nothing is local.** This is a window onto cache.nixos.org, not a copy of it.
-With no network you can read the index and anything already fetched, and
-nothing else.
+**A first read needs the cache.** The index and cached listings work offline.
+`omnibin-shell` imports packages into the real Nix store; Nix garbage
+collection may remove them after the session ends, so a later read can need
+the network again. The NixOS module and container still use the private cache.
 
-**Cold starts are downloads.** A first `python3@3.6.2` is 92 MB over three
-store paths and 2.7 seconds. The filesystem fetches at store-path granularity
-because the cache's NARs are single compression streams and cannot be
-range-read; see [design.md](./design.md#does-a-nar-index-help).
+**Cold starts are downloads.** `omnibin-shell` asks Nix to import the full
+dependency closure on first byte read. This can fetch more than the old
+one-path-at-a-time private cache. The module and container continue to fetch
+individual NARs; see [design.md](./design.md#does-a-nar-index-help).
 
 **Coverage is whatever the cache still has.** The multiverse census re-checks
 liveness weekly, and omnibin only advertises paths it found alive. The tail
@@ -41,10 +42,10 @@ the same executable at the same version. `curl` and `curlWithGnuTls` both
 have a `curl` 8.10.1, and `<name>@<version>` picks between them by the same
 rule. When it matters, go through `/nix/store` directly.
 
-**Nix inside will not work.** The lazy store is a filesystem, not a registered
-Nix store: there is no database behind it, so `nix build` and `nix-store
---query` have nothing to read. omnibin is for consuming packages. If you need
-Nix itself, use it on the real store through the passthrough.
+**Run Nix outside the shell.** `omnibin-shell` registers imported paths in the
+host Nix store, where `nix path-info` can query them. Inside the shell,
+`/nix/store` is still the FUSE view; run Nix commands in the host namespace.
+The NixOS module and container retain their private, unregistered cache.
 
 **The FUSE process is a dependency of everything.** On a machine where the
 module mounted `/nix/store`, killing omnibin takes the store with it until

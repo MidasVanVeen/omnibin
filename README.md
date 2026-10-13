@@ -101,8 +101,9 @@ $ ls /nix/store/2lb6nn8ivk1alhckv43n7734lqwbw7h9-python3-3.6.2/bin
 ```
 
 That is CPython from 2017 and it is not on the machine. Listing it cost
-nothing. Reading one byte out of `python3.6` fetches the NAR, once, after which
-the path is served from the unpacked copy like any other directory.
+nothing. Reading one byte out of `python3.6` fetches its closure. In
+`omnibin-shell`, Nix imports and registers those paths in the real store. The
+module and container serve an unpacked private copy.
 
 ## Finding things
 
@@ -139,12 +140,14 @@ $ sqlite3 /omnibin/index.db \
 
 **A shell, on any Linux.** The lazy store is mounted over `/nix/store` inside a
 user and mount namespace belonging to this shell, which dies with it. Your real
-store is served through it untouched, so the software you already have keeps
-working, including the shell you are typing into.
+store is served through it, so the software you already have keeps working.
+New packages are imported into that store when read and can later be reclaimed
+by Nix garbage collection.
+
+From this checkout:
 
 ```console
-$ nix run github:fzakaria/omnibin
-omnibin: tree at /run/user/1000/omnibin, cache at /home/you/.cache/omnibin
+$ nix run .
 
 $ python3@3.6.2 -c 'import sys; print(sys.version.split()[0])'
 3.6.2

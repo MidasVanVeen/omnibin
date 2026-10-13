@@ -112,8 +112,8 @@ it happens for the whole machine, because there it is the point.
 | ------------------------------------------ | ----------------------------- | ----------------------- |
 | `lookup` of a store path                   | `omnibin.db`                  | none                    |
 | `getattr`, `readdir`, `readlink` inside it | the published listing, cached | one 9 KB fetch per path |
-| the same, once fetched                     | the unpacked copy             | none                    |
-| `read` of a file                           | the unpacked copy             | the path's NAR, once    |
+| the same, once fetched                     | real store or private copy    | none                    |
+| `read` of a file                           | real store or private copy    | closure in shell, NAR elsewhere |
 | anything under `/omnibin/bin`              | `omnibin.db`                  | none                    |
 
 `readdir` of `/nix/store` itself lists only what has been fetched. Enumerating

@@ -1,9 +1,9 @@
 //! Getting bytes and listings out of a binary cache.
 //!
-//! Two things are fetched and they have very different costs. A file listing
-//! is about nine kilobytes and describes a whole store path; a NAR is the
-//! path itself and can be hundreds of megabytes. So listings are consulted
-//! freely and NARs are fetched only when something reads a file's contents.
+//! A file listing is about nine kilobytes and describes a whole store path;
+//! a NAR can be hundreds of megabytes. Listings are consulted freely. The
+//! shell asks Nix to import the closure on first read; other mounts unpack
+//! NARs.
 //!
 //! Decompression is done by running `zstd`, `xz`, `bzip2` or `brotli` rather
 //! than by linking four decompressors into this binary. The cache has used
@@ -47,8 +47,7 @@ fn decompressor_for(url: &str) -> Result<&'static [&'static str]> {
 
 pub struct Fetcher {
     cache_url: String,
-    /// Where unpacked store paths live, one directory per digest.
-    store_dir: PathBuf,
+    backend: Backend,
     /// Where fetched `.ls` documents are kept, so a second look at a path
     /// costs nothing even when the listings artifact is not installed.
     listing_dir: PathBuf,
@@ -57,31 +56,44 @@ pub struct Fetcher {
     /// One lock per digest, so two processes reading the same package at the
     /// same time download it once.
     in_flight: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    roots_created: Mutex<Vec<PathBuf>>,
+}
+
+enum Backend {
+    Private(PathBuf),
+    /// Indirect roots live here for exactly as long as this mount does.
+    NixStore(PathBuf),
 }
 
 impl Fetcher {
-    pub fn new(cache_dir: &Path, cache_url: &str) -> Result<Self> {
+    pub fn new(cache_dir: &Path, cache_url: &str, root_dir: Option<PathBuf>) -> Result<Self> {
         let store_dir = cache_dir.join("store");
         let listing_dir = cache_dir.join("listings");
         let narinfo_dir = cache_dir.join("narinfos");
-        fs::create_dir_all(&store_dir)?;
+        let backend = if let Some(root_dir) = root_dir {
+            fs::create_dir_all(&root_dir)?;
+            Backend::NixStore(root_dir)
+        } else {
+            fs::create_dir_all(&store_dir)?;
+            Backend::Private(store_dir)
+        };
         fs::create_dir_all(&listing_dir)?;
         fs::create_dir_all(&narinfo_dir)?;
 
         Ok(Self {
             cache_url: cache_url.trim_end_matches('/').to_string(),
-            store_dir,
+            backend,
             listing_dir,
             narinfo_dir,
             in_flight: Mutex::new(HashMap::new()),
+            roots_created: Mutex::new(Vec::new()),
         })
     }
 
-    /// Where a digest's unpacked contents are, fetching them if they are not
-    /// there yet. This is the only call in omnibin that transfers a NAR.
+    /// Where a path's contents are, importing or unpacking them if needed.
     pub fn materialize(&self, path: &StorePath) -> Result<PathBuf> {
-        let dest = self.store_dir.join(&path.digest);
-        if dest.exists() {
+        let dest = self.store_path_dir(path);
+        if matches!(self.backend, Backend::Private(_)) && dest.exists() {
             return Ok(dest);
         }
 
@@ -95,6 +107,36 @@ impl Fetcher {
                 .clone()
         };
         let _held = lock.lock().unwrap();
+        if let Backend::NixStore(root_dir) = &self.backend {
+            let root = root_dir.join(path.base_name());
+            if fs::symlink_metadata(&root).is_ok() && !root.exists() {
+                fs::remove_file(&root)?;
+            }
+            // Nix both substitutes the closure and installs the GC root. Its
+            // daemon serializes imports across separate omnibin sessions.
+            if !root.exists() || !dest.exists() {
+                let output = Command::new("nix-store")
+                    .arg("--realise")
+                    .arg(&dest)
+                    .arg("--add-root")
+                    .arg(&root)
+                    .arg("--indirect")
+                    .arg("--option")
+                    .arg("substituters")
+                    .arg(&self.cache_url)
+                    .output()
+                    .with_context(|| format!("spawning Nix for {}", dest.display()))?;
+                if !output.status.success() {
+                    bail!(
+                        "Nix could not import {}: {}",
+                        dest.display(),
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    );
+                }
+                self.roots_created.lock().unwrap().push(root);
+            }
+            return Ok(dest);
+        }
         if dest.exists() {
             return Ok(dest);
         }
@@ -102,7 +144,10 @@ impl Fetcher {
         // Unpack beside the destination and rename, so a killed process
         // leaves a stale temporary rather than a half-populated store path
         // that later looks complete.
-        let staging = self.store_dir.join(format!(".{}.tmp", path.digest));
+        let Backend::Private(store_dir) = &self.backend else {
+            unreachable!()
+        };
+        let staging = store_dir.join(format!(".{}.tmp", path.digest));
         if staging.exists() {
             fs::remove_dir_all(&staging)?;
         }
@@ -153,14 +198,67 @@ impl Fetcher {
     }
 
     /// Where a digest's contents would be, whether or not they are there yet.
-    pub fn store_path_dir(&self, digest: &str) -> PathBuf {
-        self.store_dir.join(digest)
+    pub fn store_path_dir(&self, path: &StorePath) -> PathBuf {
+        match &self.backend {
+            Backend::Private(store_dir) => store_dir.join(&path.digest),
+            Backend::NixStore(_) => Path::new("/nix/store").join(path.base_name()),
+        }
     }
 
     /// Whether a digest has already been unpacked, which is what lets the
     /// filesystem answer from real files instead of from a listing.
-    pub fn is_materialized(&self, digest: &str) -> bool {
-        self.store_path_dir(digest).exists()
+    pub fn is_materialized(&self, path: &StorePath) -> bool {
+        self.store_path_dir(path).exists()
+    }
+
+    /// Root a passthrough path before opening it, even if another session
+    /// imported it first and the store path was found at lookup time.
+    pub fn protect_passthrough(&self, path: &Path) -> Result<()> {
+        let Backend::NixStore(root_dir) = &self.backend else {
+            return Ok(());
+        };
+        // Realising a derivation would build its outputs merely to read the
+        // .drv file. Those paths are not omnibin package outputs.
+        if path.extension().is_some_and(|extension| extension == "drv") {
+            return Ok(());
+        }
+        let Some(name) = path.file_name() else {
+            return Ok(());
+        };
+        let root = root_dir.join(name);
+        if root.exists() {
+            return Ok(());
+        }
+        let lock = {
+            let mut in_flight = self.in_flight.lock().unwrap();
+            in_flight
+                .entry(name.to_string_lossy().chars().take(DIGEST_LEN).collect())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        let _held = lock.lock().unwrap();
+        if root.exists() {
+            return Ok(());
+        }
+        if fs::symlink_metadata(&root).is_ok() {
+            fs::remove_file(&root)?;
+        }
+        let output = Command::new("nix-store")
+            .arg("--realise")
+            .arg(path)
+            .arg("--add-root")
+            .arg(&root)
+            .arg("--indirect")
+            .output()?;
+        if !output.status.success() {
+            bail!(
+                "Nix could not root {}: {}",
+                path.display(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+        }
+        self.roots_created.lock().unwrap().push(root);
+        Ok(())
     }
 
     /// Ask the cache directly what a digest is.
@@ -243,6 +341,14 @@ impl Fetcher {
 
         fs::write(&cached, &json)?;
         Ok(value.get("root").cloned())
+    }
+}
+
+impl Drop for Fetcher {
+    fn drop(&mut self) {
+        for root in self.roots_created.get_mut().unwrap().drain(..) {
+            let _ = fs::remove_file(root);
+        }
     }
 }
 

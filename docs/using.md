@@ -15,9 +15,10 @@ way anybody should run this.
 
 ## omnibin-shell
 
+From this checkout:
+
 ```console
-$ nix run github:fzakaria/omnibin
-omnibin: tree at /run/user/1000/omnibin, cache at /home/you/.cache/omnibin
+$ nix run .
 $ python3@3.6.2 --version
 Python 3.6.2
 $ exit
@@ -29,6 +30,19 @@ creates a user namespace and a mount namespace and binds the lazy store over
 the machine already has keeps working. Exit and the mount is gone; the host
 never saw it.
 
+On the first file read, the daemon asks Nix to substitute the package and its
+dependency closure into the host's real store. Nix checks the cache signatures
+and registers every path. `nix path-info /nix/store/<hash>-<name>` works from
+outside the shell after that read. Omnibin keeps an indirect GC root for every
+opened store path during the session. Exiting removes those roots, so normal
+Nix garbage collection can reclaim paths no other root needs. A later session
+fetches a collected package again. Listings remain cached under
+`~/.cache/omnibin`; package payloads are not stored there.
+
+Each shell has its own mountpoints and GC roots. Concurrent shells can use the
+same package; Nix coordinates the import. If a process is killed, the next
+shell removes roots and mounts left by an abandoned session.
+
 Two details worth knowing.
 
 The daemon runs **outside** the namespace on purpose. omnibin's own libraries
@@ -37,15 +51,15 @@ namespace can page-fault on itself, which deadlocks with no way out. Outside,
 `/nix/store` is still the real one and nothing can recurse. The module does
 mount from inside, as root, and calls `mlockall` to make that safe.
 
-The tree is **not** at `/omnibin` here. Being root in a user namespace is not
-being root on the host, and `/` belongs to real root, so the directory cannot
-be created. It goes under `XDG_RUNTIME_DIR` and `$OMNIBIN_TREE` names it.
-Override with `OMNIBIN_TREE=/somewhere/you/own`.
+The shell keeps your normal user identity, including your UID and GID. The
+tree is **not** at `/omnibin` here: `/` belongs to root, so the directory
+cannot be created. It goes under `XDG_RUNTIME_DIR` and `$OMNIBIN_TREE` names
+it. Override with `OMNIBIN_TREE=/somewhere/you/own`.
 
 Run a single command instead of a shell by passing it:
 
 ```console
-$ nix run github:fzakaria/omnibin -- python3@3.6.2 -c 'print(1)'
+$ nix run . -- python3@3.6.2 -c 'print(1)'
 ```
 
 ## The NixOS module
