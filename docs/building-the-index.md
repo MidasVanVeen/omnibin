@@ -90,15 +90,10 @@ that convention is ever broken.
 Commit `data-pins.json`. That is the only file in the flake tree that knows
 where the data lives.
 
-## 5. The image follows
+## 5. Build the image
 
-`.github/workflows/update.yml` does the four steps above on a schedule, and
-then publishes the container, because the image bakes the pinned database in
-and is stale the moment a cut lands. It pushes `latest` and the cut's own tag,
-then updates the Docker Hub page, whose counts are read from the database
-rather than typed.
-
-By hand, after a cut:
+The image bakes in the pinned database, so rebuild it after cutting a data
+release. To publish it manually:
 
 ```console
 $ nix build .#docker && docker load < result

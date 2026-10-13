@@ -6,7 +6,7 @@
 
 import { html, useState, useEffect } from "htm/preact";
 
-import { SITE_ORIGIN, SYSTEMS, VIEWS } from "./config.js";
+import { SYSTEMS, VIEWS } from "./config.js";
 
 // Whether a navigation adds a history entry (clicks) or amends the current
 // one (typing), so Back walks pages rather than keystrokes.
@@ -99,8 +99,6 @@ function applyHead(route) {
   set('meta[name="description"]', "content", description);
   set('meta[property="og:title"]', "content", title);
   set('meta[property="og:description"]', "content", description);
-  set('link[rel="canonical"]', "href", SITE_ORIGIN + routeUrl(route));
-  set('meta[property="og:url"]', "content", SITE_ORIGIN + routeUrl(route));
 }
 
 export function useRouter() {

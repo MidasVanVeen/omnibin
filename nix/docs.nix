@@ -1,9 +1,6 @@
 # docs/*.md rendered to /docs/*.html. The same markdown is what GitHub shows
 # in the repository, so the two never disagree.
 { pkgs }:
-let
-  inherit (import ./site-origin.nix) siteOrigin;
-in
 pkgs.runCommand "omnibin-docs"
   {
     nativeBuildInputs = [
@@ -17,5 +14,5 @@ pkgs.runCommand "omnibin-docs"
     mkdir -p $out
     python3 ${../tools/render-docs.py} \
       ${pkgs.cmark-gfm}/bin/cmark-gfm ${../docs} $out \
-      ${siteOrigin} "__STORE_PATH__"
+      "" "__STORE_PATH__"
   ''

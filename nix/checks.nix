@@ -1,8 +1,6 @@
 # What `nix flake check` verifies beyond the packages building.
 #
-# These run in the sandbox rather than in a shell somebody remembered to
-# invoke, which is the point: a lint that only runs when CI calls it is a lint
-# that stops running the moment the workflow changes shape.
+# These run in the sandbox whenever `nix flake check` is invoked.
 { pkgs, self }:
 {
   # House style over the whole tree, code comments included: no em dashes,

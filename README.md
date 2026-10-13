@@ -29,9 +29,6 @@ every version of each, what it costs to fetch, and what is inside it.
 
 ## Status
 
-![check workflow](https://github.com/fzakaria/omnibin/actions/workflows/check.yml/badge.svg?branch=main)
-![update workflow](https://github.com/fzakaria/omnibin/actions/workflows/update.yml/badge.svg?branch=main)
-
 <!-- BEGIN index-status -->
 
 | system          | executables | `name@version` | package versions | store paths |

@@ -2,7 +2,6 @@
 // with its reasoning, exactly once, so a module never hard-codes a limit
 // another module also depends on.
 
-export const SITE_ORIGIN = "https://omnibin.dev";
 export const REPO = "https://github.com/fzakaria/omnibin";
 
 // The two sibling sites. Every store path here exists in both, so a version

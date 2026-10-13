@@ -1,8 +1,8 @@
-# The deployable site: the static files from site/, the rendered docs, and the
+# The static site: the files from site/, the rendered docs, and the
 # data files built from the pinned databases.
 #
 # The data is built here rather than fetched at page load, so the page and the
-# index it describes always deploy together. The databases come from the
+# index it describes are built together. The databases come from the
 # release data-pins.json names, which is what keeps the pair together.
 { pkgs, self }:
 let
@@ -59,7 +59,7 @@ pkgs.runCommand "omnibin-site" { } ''
   done
 
   # Content-hash the module directory after the substitutions, so the HTML and
-  # the script it loads can never be a mismatched pair across deploys.
+  # the script it loads always match.
   hash=$(find $out/js -type f -name '*.js' | LC_ALL=C sort |
     xargs sha256sum | sha256sum | cut -c1-12)
   mv $out/js "$out/js.$hash"

@@ -223,9 +223,8 @@ def rewrite_links(body):
     """Point the markdown's own links at their rendered equivalents.
 
     Two kinds need moving. A `./cli.md` link drops its extension, because the
-    published URL is `/docs/cli`. And a link to something else in the
-    repository, a workflow file say, has no rendered counterpart at all, so
-    it goes to GitHub rather than 404ing under /docs/.
+    site URL is `/docs/cli`. A link to another repository file has no rendered
+    counterpart, so it goes to GitHub rather than 404ing under /docs/.
 
     Every docs page lives directly in /docs/ and every URL resolves with that
     as its base, so these stay relative and need no notion of depth.
@@ -302,11 +301,9 @@ def provenance(store_path):
 def url_of(name):
     """A page's URL path, without the `.html` a reader would have to type.
 
-    The file on disk is still `<name>.html`; GitHub Pages resolves an
-    extensionless request onto it, and `nix run .#serve` does the same so a
-    local preview and the deploy agree. Because the URL has no trailing
-    slash, its base directory is /docs/ either way, which is why every
-    relative path on the page works unchanged.
+    The file on disk is still `<name>.html`; the local server resolves an
+    extensionless request onto it. Because the URL has no trailing slash,
+    its base directory is /docs/, so relative links work unchanged.
     """
     return "/docs/" if name == "index" else f"/docs/{name}"
 
@@ -315,7 +312,7 @@ def canonical(origin, name):
     """A page is reachable both with and without its `index.html`, and the
     sitemap offers the shorter form. Naming the canonical one keeps a crawler
     from treating them as duplicates. Skipped when no origin is known, which
-    is a local render rather than the deploy."""
+    is a local render without a configured origin."""
     if not origin:
         return ""
     return f'\n    <link rel="canonical" href="{origin}{url_of(name)}" />'

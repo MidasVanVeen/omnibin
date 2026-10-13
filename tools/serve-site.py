@@ -5,8 +5,7 @@ Not a bare `python -m http.server`: every file in a store output carries the
 epoch as its mtime, so If-Modified-Since would 304 a file from a *previous*
 build, and the browser then shows a stale site across rebuilds whatever
 changed. Ignore conditional requests and forbid caching outright; this server
-exists only for testing. (GitHub Pages serves real validators, so the deployed
-site is unaffected.)
+exists only for local testing.
 
     SITE_ROOT=<dir> serve-site.py [port]
 """
@@ -22,11 +21,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         del self.headers["If-Modified-Since"]
         del self.headers["If-None-Match"]
 
-        # GitHub Pages resolves an extensionless request onto <path>.html,
-        # which is how /docs/cli serves cli.html. Doing the same here is what
-        # keeps the docs' own links working in a local preview: without it they
-        # 404 here and succeed once deployed, which is the worst way round to
-        # find out.
+        # Resolve extensionless docs links such as /docs/cli to cli.html.
         path, sep, query = self.path.partition("?")
         local = self.translate_path(path)
         if not os.path.exists(local) and os.path.isfile(local + ".html"):
